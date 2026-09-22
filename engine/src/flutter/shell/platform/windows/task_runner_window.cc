@@ -52,7 +52,6 @@ void TimerThread::ScheduleAt(
   if (time_point < next_fire_time_) {
     next_fire_time_ = time_point;
   }
-  ++schedule_counter_;
   cv_.notify_all();
 }
 
@@ -63,17 +62,16 @@ void TimerThread::TimerThreadMain() {
     if (next_fire_time_ > std::chrono::high_resolution_clock::now()) {
       continue;
     }
-    auto scheduled_count = schedule_counter_;
     if (callback_) {
-      lock.unlock();
-      callback_();
-      lock.lock();
-    }
-    // If nothing was scheduled in the meanwhile park the timer.
-    if (scheduled_count == schedule_counter_ &&
-        next_fire_time_ <= std::chrono::high_resolution_clock::now()) {
+      // Consume this deadline before invoking the callback so that work
+      // scheduled during the callback keeps its own future deadline.
       next_fire_time_ =
           std::chrono::time_point<std::chrono::high_resolution_clock>::max();
+      // Stop() may clear callback_ while the callback is running.
+      auto callback = callback_;
+      lock.unlock();
+      callback();
+      lock.lock();
     }
   }
 }

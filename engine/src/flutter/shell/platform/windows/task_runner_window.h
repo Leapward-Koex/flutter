@@ -21,7 +21,8 @@ namespace flutter {
 
 namespace testing {
 class TestTaskRunnerWindow;
-}
+class TestTimerThread;
+}  // namespace testing
 
 // Background timer thread. Necessary because neither SetTimer nor
 // CreateThreadpoolTimer have good enough accuracy not to affect the
@@ -42,12 +43,13 @@ class TimerThread {
       std::chrono::time_point<std::chrono::high_resolution_clock> time_point);
 
  private:
+  friend class testing::TestTimerThread;
+
   void TimerThreadMain();
 
   std::mutex mutex_;
   std::condition_variable cv_;
   std::function<void()> callback_;
-  uint64_t schedule_counter_ = 0;
   std::chrono::time_point<std::chrono::high_resolution_clock> next_fire_time_;
   std::optional<std::thread> thread_;
 };

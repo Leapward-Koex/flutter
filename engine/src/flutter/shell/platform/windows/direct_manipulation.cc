@@ -66,6 +66,9 @@ HRESULT DirectManipulationEventHandler::OnViewportStatusChanged(
     IDirectManipulationViewport* viewport,
     DIRECTMANIPULATION_STATUS current,
     DIRECTMANIPULATION_STATUS previous) {
+  if (!owner_) {
+    return S_OK;
+  }
   if (during_synthesized_reset_) {
     during_synthesized_reset_ = current != DIRECTMANIPULATION_READY;
     return S_OK;
@@ -134,6 +137,9 @@ HRESULT DirectManipulationEventHandler::OnViewportUpdated(
 HRESULT DirectManipulationEventHandler::OnContentUpdated(
     IDirectManipulationViewport* viewport,
     IDirectManipulationContent* content) {
+  if (!owner_) {
+    return S_OK;
+  }
   float transform[6];
   HRESULT hr = content->GetContentTransform(transform, ARRAYSIZE(transform));
   if (FAILED(hr)) {
@@ -160,6 +166,22 @@ HRESULT DirectManipulationEventHandler::OnContentUpdated(
 HRESULT DirectManipulationEventHandler::OnInteraction(
     IDirectManipulationViewport2* viewport,
     DIRECTMANIPULATION_INTERACTION_TYPE interaction) {
+  if (!owner_) {
+    return S_OK;
+  }
+  // Unlike viewport updates, interaction notifications are delivered without
+  // polling the update manager. Keep polling throughout the interaction,
+  // including inertia, but allow the platform thread to sleep when idle.
+  switch (interaction) {
+    case DIRECTMANIPULATION_INTERACTION_BEGIN:
+      owner_->SetNeedsUpdate(true);
+      break;
+    case DIRECTMANIPULATION_INTERACTION_END:
+      owner_->SetNeedsUpdate(false);
+      break;
+    default:
+      break;
+  }
   return S_OK;
 }
 
@@ -214,12 +236,12 @@ void DirectManipulationOwner::ResizeViewport(unsigned int width,
 }
 
 void DirectManipulationOwner::Destroy() {
+  SetNeedsUpdate(false);
   if (handler_) {
     handler_->owner_ = nullptr;
   }
 
   if (viewport_) {
-    WARN_IF_FAILED(viewport_->Disable());
     WARN_IF_FAILED(viewport_->Disable());
     WARN_IF_FAILED(viewport_->RemoveEventHandler(viewportHandlerCookie_));
     WARN_IF_FAILED(viewport_->Abandon());
@@ -245,6 +267,12 @@ void DirectManipulationOwner::SetContact(UINT contactId) {
 void DirectManipulationOwner::SetBindingHandlerDelegate(
     WindowBindingHandlerDelegate* delegate) {
   binding_handler_delegate = delegate;
+}
+
+void DirectManipulationOwner::SetNeedsUpdate(bool needs_update) {
+  if (window_) {
+    window_->SetDirectManipulationNeedsUpdate(needs_update);
+  }
 }
 
 void DirectManipulationOwner::Update() {
