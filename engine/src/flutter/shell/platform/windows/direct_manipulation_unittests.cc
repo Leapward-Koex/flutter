@@ -138,6 +138,21 @@ class MockIDirectManipulationContent : public IDirectManipulationContent {
   FML_DISALLOW_COPY_AND_ASSIGN(MockIDirectManipulationContent);
 };
 
+TEST(DirectManipulationTest, DetachedHandlerIgnoresCallbacks) {
+  // Destroy detaches the handler before releasing COM objects, which can still
+  // deliver callbacks while Disable/Abandon/RemoveEventHandler are in progress.
+  auto handler = fml::MakeRefCounted<DirectManipulationEventHandler>(nullptr);
+  EXPECT_EQ(
+      handler->OnInteraction(nullptr, DIRECTMANIPULATION_INTERACTION_BEGIN),
+      S_OK);
+  EXPECT_EQ(handler->OnInteraction(nullptr, DIRECTMANIPULATION_INTERACTION_END),
+            S_OK);
+  EXPECT_EQ(handler->OnViewportStatusChanged(
+                nullptr, DIRECTMANIPULATION_RUNNING, DIRECTMANIPULATION_READY),
+            S_OK);
+  EXPECT_EQ(handler->OnContentUpdated(nullptr, nullptr), S_OK);
+}
+
 TEST(DirectManipulationTest, TestGesture) {
   MockIDirectManipulationContent content;
   MockWindowBindingHandlerDelegate delegate;
